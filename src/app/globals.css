@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* راحة العين — §4: مسافات مريحة، خطوط لينة، حركات هادئة */
+
+html {
+  font-size: 17px; /* حجم أساس أكبر لقراءة عربية مريحة */
+  scroll-behavior: smooth;
+}
+
+@media (min-width: 768px) {
+  html {
+    font-size: 18px;
+  }
+}
+
+body {
+  min-height: 100vh;
+  line-height: 1.9;
+  letter-spacing: 0;
+}
+
+/* أهداف لمس لا تقل عن 44px — §43 */
+button, a.btn, [role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* تركيز مرئي واضح لإمكانية الوصول — §47 */
+:focus-visible {
+  outline: 3px solid #82CAFA;
+  outline-offset: 2px;
+}
+
+/* بطاقات ناعمة */
+.card {
+  @apply rounded-2xl bg-white p-6 shadow-card;
+}
+
+.btn-primary {
+  @apply min-h-[48px] rounded-xl bg-sky-200 px-6 font-bold text-ink shadow-soft transition-colors hover:bg-sky-100 active:scale-[0.99];
+}
+
+.btn-secondary {
+  @apply min-h-[48px] rounded-xl border border-sky-200 bg-white px-6 font-bold text-ink transition-colors hover:bg-sky-50;
+}
+
+/* نص ثنائي الاتجاه مختلط عربي/إنجليزي — §5 */
+.bidi-safe {
+  unicode-bidi: plaintext;
+}
