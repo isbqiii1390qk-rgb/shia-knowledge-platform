@@ -1,0 +1,451 @@
+// مخطط قاعدة البيانات — منصة المعرفة العقائدية الشيعية
+// Book → Edition → Volume → Chapter → Narration → Question
+// المحرك تنافسي، الخادم هو مصدر الحقيقة الوحيد (Server-Authoritative)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS ============
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum VerificationStatus {
+  DRAFT
+  UNDER_REVIEW
+  VERIFIED
+  PUBLISHED
+  ARCHIVED
+  REJECTED
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum MatchState {
+  WAITING_FOR_PLAYER
+  MATCH_READY
+  QUESTION_ACTIVE
+  FIRST_PLAYER_ANSWERING
+  SECOND_PLAYER_ANSWERING
+  SOURCE_REVIEW
+  WAITING_FOR_BOTH_READY
+  MATCH_FINISHED
+  CANCELLED
+}
+
+enum MatchEventType {
+  MATCH_CREATED
+  PLAYER_JOINED
+  MATCH_READY
+  QUESTION_STARTED
+  BUZZER_PRESSED
+  BUZZER_WON
+  ANSWER_SUBMITTED
+  ANSWER_CORRECT
+  ANSWER_INVALID
+  ANSWER_INCORRECT
+  ANSWER_TIMEOUT
+  SECOND_PLAYER_ALLOWED
+  SOURCE_REVEALED
+  PLAYER_READY
+  NEXT_QUESTION_STARTED
+  MATCH_FINISHED
+  PLAYER_DISCONNECTED
+  PLAYER_RECONNECTED
+  MATCH_CANCELLED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACTIVE
+  JOINED
+  EXPIRED
+  CANCELLED
+}
+
+enum ReportReason {
+  QUESTION_INACCURATE
+  SOURCE_MISMATCH
+  AMBIGUOUS_QUESTION
+  OFFENSIVE_BEHAVIOR
+  CHEATING
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+// ============ USERS & ACCOUNT ============
+
+model User {
+  id             String   @id @default(cuid())
+  username       String   @unique
+  usernameLower  String   @unique
+  displayName    String
+  passwordHash   String
+  role           Role     @default(USER)
+  countryId      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  rulesAccepted   Boolean  @default(false)
+  rulesAcceptedAt DateTime?
+
+  country           Country      @relation(fields: [countryId], references: [id])
+  settings          UserSettings?
+  statistics        UserStatistic?
+  matchPlayers      MatchPlayer[]
+  invitationsCreated Invitation[] @relation("InvitationCreator")
+  invitationsUsed   Invitation[] @relation("InvitationJoiner")
+  reportsCreated    Report[]      @relation("ReportCreator")
+  reportsTargeted   Report[]      @relation("ReportTarget")
+  auditLogs         AdminAuditLog[]
+
+  @@index([countryId])
+  @@map("users")
+}
+
+model Country {
+  id   String @id @default(cuid())
+  code String @unique // ISO 3166-1 alpha-2
+  nameEn String
+  nameAr String
+  users User[]
+
+  @@map("countries")
+}
+
+model UserSettings {
+  id                String  @id @default(cuid())
+  userId            String  @unique
+  soundEnabled      Boolean @default(true)
+  reducedMotion     Boolean @default(false)
+  notificationsEnabled Boolean @default(true)
+  language          String  @default("ar")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+model UserStatistic {
+  id             String @id @default(cuid())
+  userId         String @unique
+  level          Int    @default(1)
+  rating         Int    @default(1000)
+  wins           Int    @default(0)
+  losses         Int    @default(0)
+  matchesPlayed  Int    @default(0)
+  correctAnswers Int    @default(0)
+  totalAnswered  Int    @default(0)
+  currentStreak  Int    @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([rating(sort: Desc), wins(sort: Desc), matchesPlayed(sort: Desc)])
+  @@map("user_statistics")
+}
+
+// ============ SOURCES: Book → Edition → Volume → Chapter → Narration ============
+
+model Book {
+  id        String   @id @default(cuid())
+  titleAr   String
+  titleEn   String?
+  authorAr  String
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  editions   Edition[]
+  narrations Narration[]
+
+  @@map("books")
+}
+
+model Edition {
+  id         String   @id @default(cuid())
+  bookId     String
+  titleAr    String
+  publisher  String?
+  editionYear Int?
+  citation   String?
+  archived   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  book        Book          @relation(fields: [bookId], references: [id])
+  narrations  Narration[]
+  questions   Question[]
+
+  @@index([bookId])
+  @@map("editions")
+}
+
+model Volume {
+  id        String @id @default(cuid())
+  editionId String
+  number    Int
+  titleAr   String?
+
+  edition    Edition      @relation(fields: [editionId], references: [id])
+  chapters   Chapter[]
+
+  @@unique([editionId, number])
+  @@index([editionId])
+  @@map("volumes")
+}
+
+model Chapter {
+  id        String  @id @default(cuid())
+  volumeId  String
+  number    Int
+  titleAr   String
+
+  volume     Volume      @relation(fields: [volumeId], references: [id])
+  narrations Narration[]
+
+  @@index([volumeId])
+  @@map("chapters")
+}
+
+model Narration {
+  id             String   @id @default(cuid())
+  chapterId      String
+  editionId      String
+  bookId         String
+  hadithNumber   Int?
+  pageNumber      Int?
+  arabicText     String
+  narrator       String?
+  translationNote String?
+  verificationStatus VerificationStatus @default(DRAFT)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  book     Book       @relation(fields: [bookId], references: [id])
+  edition  Edition    @relation(fields: [editionId], references: [id])
+  chapter  Chapter    @relation(fields: [chapterId], references: [id])
+  questions Question[]
+
+  @@index([bookId, hadithNumber])
+  @@index([editionId, pageNumber])
+  @@index([chapterId])
+  @@map("narrations")
+}
+
+// ============ QUESTIONS ============
+
+model Question {
+  id             String   @id @default(cuid())
+  narrationId    String
+  bookId         String
+  editionId      String
+  questionText   String
+  questionHash   String   @unique // normalized text hash for duplicate detection
+  difficulty     Difficulty @default(MEDIUM)
+  topic          String?
+  verificationStatus VerificationStatus @default(DRAFT)
+  reviewedById   String?
+  reviewedAt     DateTime?
+  provenanceNote String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  narration Narration       @relation(fields: [narrationId], references: [id])
+  book      Book            @relation(fields: [bookId], references: [id])
+  edition   Edition         @relation(fields: [editionId], references: [id])
+  choices   AnswerChoice[]
+  matchQuestions MatchQuestion[]
+
+  @@index([verificationStatus, difficulty])
+  @@index([bookId])
+  @@map("questions")
+}
+
+model AnswerChoice {
+  id         String  @id @default(cuid())
+  questionId String
+  content    String
+  isCorrect  Boolean // stable internal correct answer, never A/B/C/D
+  order      Int
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@map("answer_choices")
+}
+
+// ============ MATCHES & REAL-TIME ENGINE ============
+
+model Match {
+  id           String     @id @default(cuid())
+  state        MatchState @default(WAITING_FOR_PLAYER)
+  winnerId     String?
+  createdAt    DateTime   @default(now())
+  finishedAt   DateTime?
+  cancelledAt  DateTime?
+  cancelReason String?
+
+  players        MatchPlayer[]
+  matchQuestions MatchQuestion[]
+  events         MatchEvent[]
+  invitations    Invitation[]
+
+  @@index([state])
+  @@index([createdAt])
+  @@map("matches")
+}
+
+model MatchPlayer {
+  id            String   @id @default(cuid())
+  matchId       String
+  userId        String
+  score         Int      @default(0)
+  rawScore      Int      @default(0) // complete raw score incl. penalties, for audit
+  answeredCount Int      @default(0)
+  correctCount  Int      @default(0)
+  isWinner      Boolean  @default(false)
+  lastSeenAt    DateTime @default(now())
+  connected     Boolean  @default(true)
+  ready         Boolean  @default(false)
+  finished      Boolean  @default(false)
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([matchId, userId])
+  @@index([matchId])
+  @@index([userId])
+  @@map("match_players")
+}
+
+model MatchQuestion {
+  id          String   @id @default(cuid())
+  matchId     String
+  questionId  String
+  sequence    Int
+  startedAt   DateTime?
+  finishedAt  DateTime?
+
+  match    Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@unique([matchId, questionId])
+  @@unique([matchId, sequence])
+  @@index([matchId])
+  @@map("match_questions")
+}
+
+model AnswerEvent {
+  id           String   @id @default(cuid())
+  matchId      String
+  matchQuestionId String
+  matchPlayerId String
+  choiceId     String?
+  isCorrect    Boolean?
+  points       Int
+  rawPoints    Int
+  answeredAt   DateTime @default(now())
+
+  @@index([matchId])
+  @@index([matchPlayerId])
+  @@map("answer_events")
+}
+
+model MatchEvent {
+  id         String         @id @default(cuid())
+  matchId    String
+  type       MatchEventType
+  playerId   String?
+  payload    Json?
+  createdAt  DateTime       @default(now())
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId, createdAt])
+  @@index([matchId, type])
+  @@map("match_events")
+}
+
+// Idempotency ledger — ensures gameplay commands process exactly once
+model ProcessedRequest {
+  id          String   @id @default(cuid())
+  requestKey  String   @unique // e.g. "buzz:matchId:playerId:requestId"
+  processedAt DateTime @default(now())
+
+  @@map("processed_requests")
+}
+
+// ============ INVITATIONS ============
+
+model Invitation {
+  id          String           @id @default(cuid())
+  token       String           @unique
+  matchId     String
+  creatorId   String
+  joinerId    String?
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime         @default(now())
+
+  match   Match @relation(fields: [matchId], references: [id])
+  creator User  @relation("InvitationCreator", fields: [creatorId], references: [id])
+  joiner  User? @relation("InvitationJoiner", fields: [joinerId], references: [id])
+
+  @@index([token])
+  @@index([matchId])
+  @@map("invitations")
+}
+
+// ============ MODERATION & ADMIN ============
+
+model Report {
+  id        String       @id @default(cuid())
+  reporterId String
+  targetUserId String?
+  questionId String?
+  reason    ReportReason
+  details   String?
+  status    ReportStatus @default(OPEN)
+  createdAt DateTime     @default(now())
+  resolvedAt DateTime?
+  resolvedById String?
+
+  reporter User  @relation("ReportCreator", fields: [reporterId], references: [id])
+  target   User? @relation("ReportTarget", fields: [targetUserId], references: [id])
+
+  @@index([status])
+  @@map("reports")
+}
+
+model AdminAuditLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id])
+
+  @@index([adminId, createdAt])
+  @@map("admin_audit_logs")
+}
