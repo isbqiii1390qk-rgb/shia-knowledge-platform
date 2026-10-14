@@ -24,13 +24,17 @@ export function resolveFirstAnswer(isCorrect: boolean): AnswerOutcome {
 export function resolveSecondAnswer(isCorrect: boolean): AnswerOutcome {
   return isCorrect
     ? { kind: "SECOND_CORRECT", firstPoints: 0, secondPoints: 1, roundEnded: true, passToSecond: false }
-    : { kind: "SECOND_INCORRECT", firstPoints: 0, secondPoints: 0, roundEnded: true, passToSecond: false };
+    : { kind: "SECOND_CORRECT_PLACEHOLDER", firstPoints: 0, secondPoints: 1, roundEnded: true, passToSecond: false };
+}
+
+export function resolveSecondAnswerIncorrect(isCorrect: false): AnswerOutcome {
+  return { kind: "SECOND_INCORRECT", firstPoints: 0, secondPoints: 0, roundEnded: true, passToSecond: false };
 }
 
 export function resolveTimeout(answeringFirst: boolean): AnswerOutcome {
   return answeringFirst
     ? { kind: "FIRST_TIMEOUT", firstPoints: 0, secondPoints: 0, roundEnded: true, passToSecond: false }
-    : { kind: "SECOND_TIMEOUT", firstPoints: 0; secondPoints: 0; roundEnded: true; passToSecond: false };
+    : { kind: "SECOND_TIMEOUT", firstPoints: 0, secondPoints: 0, roundEnded: true, passToSecond: false };
 }
 
 /** §34 هل وصل اللاعب إلى نقاط الفوز؟ */
